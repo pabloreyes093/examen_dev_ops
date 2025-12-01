@@ -8,7 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    needs: []
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,7 +18,7 @@ jobs:
           echo "IMAGE=ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0" >> $GITHUB_ENV
           echo "STACK_FILE=reyes.yml" >> $GITHUB_ENV
 
-      - name: Create stack file on remote and deploy
+      - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -27,9 +27,11 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            # Login to GHCR from remote (so the server can pull private image)
+
+            # Login to GHCR on the remote VPS
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
-            # Write stack file
+
+            # Create docker compose (stack) file
             cat > reyes.yml <<'EOF'
 version: "3.8"
 services:
@@ -42,19 +44,22 @@ services:
         condition: on-failure
       replicas: 1
 EOF
-            # Ensure firewall opens port 1002 (Debian/Ubuntu example with ufw if exists)
+
+            # Open firewall port on VPS (optional)
             if command -v ufw >/dev/null 2>&1; then
               sudo ufw allow 1002/tcp || true
             fi
+
             # Pull latest image
             docker pull ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0
-            # Deploy stack (swarm). If no swarm, use docker compose as fallback.
+
+            # Deploy with swarm if active, otherwise use docker compose
             if docker info --format '{{.Swarm.LocalNodeState}}' | grep -q active; then
               docker stack deploy -c reyes.yml reyes_stack
             else
-              # Try docker compose v2
               docker compose -f reyes.yml up -d
             fi
-            # Confirm container is running
-            echo "Deployed. Containers:"
-            docker ps --filter "ancestor=ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+
+            # Show running containers
+            docker ps --filter "ancestor=ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0" \
+              --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
