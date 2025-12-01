@@ -7,7 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app
 
-ENV FLASK_APP=app/main.py
+ENV FLASK_APP=app.main
 EXPOSE 5000
 
-CMD ["python", "-u", "app/main.py"]
+# Ejecutar como módulo para que funcionen los imports relativos
+CMD ["python", "-m", "app.main"]
