@@ -13,25 +13,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare variables
-        run: |
-          echo "IMAGE=ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0" >> $GITHUB_ENV
-          echo "STACK_FILE=reyes.yml" >> $GITHUB_ENV
-
-      - name: Deploy to VPS via SSH
+      - name: Deploy to VPS
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
           script: |
             set -e
 
-            # Login to GHCR on the remote VPS
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
 
-            # Create docker compose (stack) file
+            # Crear stack file
             cat > reyes.yml <<'EOF'
 version: "3.8"
 services:
@@ -39,27 +33,12 @@ services:
     image: ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0
     ports:
       - "1002:5000"
-    deploy:
-      restart_policy:
-        condition: on-failure
-      replicas: 1
+    restart: always
 EOF
 
-            # Open firewall port on VPS (optional)
-            if command -v ufw >/dev/null 2>&1; then
-              sudo ufw allow 1002/tcp || true
-            fi
-
-            # Pull latest image
             docker pull ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0
 
-            # Deploy with swarm if active, otherwise use docker compose
-            if docker info --format '{{.Swarm.LocalNodeState}}' | grep -q active; then
-              docker stack deploy -c reyes.yml reyes_stack
-            else
-              docker compose -f reyes.yml up -d
-            fi
+            # Levantar contenedor
+            docker compose -f reyes.yml up -d
 
-            # Show running containers
-            docker ps --filter "ancestor=ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0" \
-              --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+            echo "Aplicación desplegada correctamente"
