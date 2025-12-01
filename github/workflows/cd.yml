@@ -1,0 +1,60 @@
+name: CD - deploy to VPS
+
+on:
+  push:
+    branches:
+      - reyes
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    needs: []
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare variables
+        run: |
+          echo "IMAGE=ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0" >> $GITHUB_ENV
+          echo "STACK_FILE=reyes.yml" >> $GITHUB_ENV
+
+      - name: Create stack file on remote and deploy
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            # Login to GHCR from remote (so the server can pull private image)
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
+            # Write stack file
+            cat > reyes.yml <<'EOF'
+version: "3.8"
+services:
+  web:
+    image: ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0
+    ports:
+      - "1002:5000"
+    deploy:
+      restart_policy:
+        condition: on-failure
+      replicas: 1
+EOF
+            # Ensure firewall opens port 1002 (Debian/Ubuntu example with ufw if exists)
+            if command -v ufw >/dev/null 2>&1; then
+              sudo ufw allow 1002/tcp || true
+            fi
+            # Pull latest image
+            docker pull ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0
+            # Deploy stack (swarm). If no swarm, use docker compose as fallback.
+            if docker info --format '{{.Swarm.LocalNodeState}}' | grep -q active; then
+              docker stack deploy -c reyes.yml reyes_stack
+            else
+              # Try docker compose v2
+              docker compose -f reyes.yml up -d
+            fi
+            # Confirm container is running
+            echo "Deployed. Containers:"
+            docker ps --filter "ancestor=ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
