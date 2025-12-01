@@ -3,7 +3,7 @@ services:
   web:
     image: ghcr.io/pabloreyes093/examen_dev_ops:reyes-3.0.0
     ports:
-      - "1002:5000"
+      - "1003:5000"
     deploy:
       restart_policy:
         condition: on-failure
