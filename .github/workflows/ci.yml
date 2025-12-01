@@ -31,7 +31,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -q
+          PYTHONPATH=$PWD pytest -q
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
