@@ -1,0 +1,33 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - reyes
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            cd ${{ secrets.APP_DIR }}
+            echo "📌 Haciendo pull del repositorio..."
+            git pull origin reyes
+            echo "📌 Actualizando dependencias..."
+            pip install -r requirements.txt
+            echo "📌 Reiniciando servicio..."
+            sudo systemctl restart flaskapp
+            echo "🚀 Deploy completado correctamente"
